@@ -14,5 +14,6 @@ options:
   -h, --help            show this help
   -o, --output OUT      output file
   -p, --program PROG    program text or file
+  -s, --steps           log steps taken
   -t, --tape TAPE       tape text or file
 ```
