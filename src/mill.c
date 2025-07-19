@@ -16,7 +16,7 @@
 
 
 static const char _usage[] =
-    "usage: mill -p PROG [-t TAPE] [-o OUT]\n";
+    "usage: mill -p PROG [-t TAPE] [-o OUT] [-s]\n";
 
 static const char _help_page[] =
     "usage: mill -p PROG [-t TAPE] [-o OUT]\n"
@@ -27,12 +27,14 @@ static const char _help_page[] =
     "  -h, --help            show this help\n"
     "  -o, --output OUT      output file\n"
     "  -p, --program PROG    program text or file\n"
+    "  -s, --steps           log steps taken\n"
     "  -t, --tape TAPE       tape text or file\n"
     ;
 
 
 struct AppArgs {
     int needs_help;
+    int log_steps;
     const char* program;
     const char* tape;
     const char* output;
@@ -71,6 +73,10 @@ parse_args(int argc, const char* argv[], struct AppArgs* args) {
                 else if (strcmp(argv[i], "-p") == 0 ||
                     strcmp(argv[i], "--program") == 0) {
                     state = 1;
+                }
+                else if (strcmp(argv[i], "-s") == 0 ||
+                    strcmp(argv[i], "--steps") == 0) {
+                    args->log_steps = 1;
                 }
                 else if (strcmp(argv[i], "-t") == 0 ||
                     strcmp(argv[i], "--tape") == 0) {
@@ -604,7 +610,8 @@ mill_print_tape(FILE* file, struct MillTape* tape) {
 
 
 static int
-mill_run(struct MillProgram* prog, struct MillTape* tape) {
+mill_run(struct MillProgram* prog, struct MillTape* tape,
+    size_t* steps) {
     size_t pos = tape->pos;
     size_t state = prog->syminit;
     size_t halt = prog->symhalt;
@@ -635,12 +642,18 @@ mill_run(struct MillProgram* prog, struct MillTape* tape) {
                     case HeadMove_right: dp = 1; break;
                     default:
                         tape->pos = pos;
+                        if (steps != NULL) {
+                            *steps = t + 1;
+                        }
                         fprintf(stderr, "error: invalid head movement\n");
                         return -1;
                 }
                 pos = (pos + dp) % tape->size;
                 if (state == halt) {
                     tape->pos = pos;
+                    if (steps != NULL) {
+                        *steps = t + 1;
+                    }
                     return 0;
                 }
                 break;
@@ -652,12 +665,18 @@ mill_run(struct MillProgram* prog, struct MillTape* tape) {
                 c = L'_';
             }
             tape->pos = pos;
+            if (steps != NULL) {
+                *steps = t + 1;
+            }
             fprintf(stderr, "error: unhandled state %ls '%lc'\n", s, c);
             return -1;
         }
     }
 
     tape->pos = pos;
+    if (steps != NULL) {
+        *steps = MILL_STEPS_MAX;
+    }
     fprintf(stderr, "timed out after %zu instructions\n", (size_t) MILL_STEPS_MAX);
     return 1;
 }
@@ -711,10 +730,15 @@ int main(int argc, const char* argv[]) {
         return res;
     }
 
-    res = mill_run(&_Program, &_Tape);
+    size_t steps = 0;
+    res = mill_run(&_Program, &_Tape, &steps);
     if (res != 0) {
         args_close_files(&args);
         return res;
+    }
+
+    if (args.log_steps != 0) {
+        fprintf(stderr, "%zu steps\n", steps);
     }
 
     res = mill_print_tape(args.output_file, &_Tape);
