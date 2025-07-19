@@ -723,13 +723,6 @@ int main(int argc, const char* argv[]) {
         return res;
     }
 
-/*
-    wchar_t est[] = {L'ä', L'ö', L'õ', L'ü', L'\0'};
-    // char est[] = { 228, 246, 245, 252, '\0'};
-    // uchar est[] = L"äöõü";
-    printf("est: %ls\n", est);
-*/
-
     args_close_files(&args);
     return 0;
 }
