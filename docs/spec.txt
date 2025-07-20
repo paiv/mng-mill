@@ -1,0 +1,49 @@
+(from https://mng.quest/quest/tutorial)
+
+The Logic Mill is what less than 100 years later would be called the
+Turing machine. It reads symbols on a tape, follows simple rules, and
+manipulates the tape step-by-step to solve a problem. It works by
+moving a read/write „head“ over a tape of symbols, changing one symbol
+at a time based on a set of transition rules. It accepts the
+transition rules in the following format:
+
+currentState1 currentSymbol1 newState1 newSymbol1 moveDirection
+currentState2 currentSymbol2 newState2 newSymbol2 moveDirection
+currentState3 currentSymbol3 newState3 newSymbol3 moveDirection
+...
+
+Each transition rule has 5 parts:
+
+currentState — The machine’s current state.
+currentSymbol — The symbol under the head.
+newState — The new state to switch to.
+newSymbol — The symbol to write on the tape.
+moveDirection — Move the head to the left (L) or right (R).
+
+Other rules:
+
+- The Mill starts on the first non-blank cell of the input tape and is
+  in the state INIT
+- The Mill halts when it's in the state HALT
+- Each cell can contain only one symbol.
+- A cell without a symbol is a blank cell and is represented by _
+- You might comment your code by using // (see the example below)
+
+Example
+
+Let's take unary number increment as an example. The number is
+represented as a sequence of |. For example, 4 is represented as ||||
+on the tape. The transition rules for increment would be:
+
+INIT | FIND | R  // We start on the 1st non-blank cell and transition to FIND state
+FIND | FIND | R  // We move right...
+FIND _ HALT | R  // ...until we find a blank cell, which we change to | and halt
+
+Limitations
+
+- The tape length is limited to 2^20 cells (1 048 576 cells).
+- The number of states is limited to 2^10 (1024 states).
+- State might be any string of up to 32 chars.
+- The list of the transition rules is limited to 710 000 characters.
+- The Mill has one tape and one head.
+
