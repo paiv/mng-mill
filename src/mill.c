@@ -19,7 +19,7 @@ static const char _usage[] =
     "usage: mill -p PROG [-t TAPE] [-o OUT] [-s]\n";
 
 static const char _help_page[] =
-    "usage: mill -p PROG [-t TAPE] [-o OUT]\n"
+    "usage: mill -p PROG [-t TAPE] [-o OUT] [-s]\n"
     "\n"
     "Logic Mill engine https://mng.quest/\n"
     "\n"
