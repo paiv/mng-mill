@@ -6,7 +6,7 @@ https://mng.quest/
 
 
 ```
-usage: mill -p PROG [-t TAPE] [-o OUT]
+usage: mill -p PROG [-t TAPE] [-o OUT] [-s]
 
 Logic Mill engine https://mng.quest/
 
