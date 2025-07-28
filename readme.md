@@ -6,7 +6,7 @@ https://mng.quest/
 
 
 ```
-usage: mill -p PROG [-t TAPE] [-o OUT] [-s]
+usage: mill -p PROG [-t TAPE] [-o OUT] [-s] [-v]
 
 Logic Mill engine https://mng.quest/
 
@@ -16,4 +16,5 @@ options:
   -p, --program PROG    program text or file
   -s, --steps           log steps taken
   -t, --tape TAPE       tape text or file
+  -v, --verbose         verbose output
 ```
