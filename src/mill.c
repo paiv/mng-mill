@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <wchar.h>
 
 
@@ -16,10 +17,10 @@
 
 
 static const char _usage[] =
-    "usage: mill -p PROG [-t TAPE] [-o OUT] [-s]\n";
+    "usage: mill -p PROG [-t TAPE] [-o OUT] [-s] [-v]\n";
 
 static const char _help_page[] =
-    "usage: mill -p PROG [-t TAPE] [-o OUT] [-s]\n"
+    "usage: mill -p PROG [-t TAPE] [-o OUT] [-s] [-v]\n"
     "\n"
     "Logic Mill engine https://mng.quest/\n"
     "\n"
@@ -29,12 +30,14 @@ static const char _help_page[] =
     "  -p, --program PROG    program text or file\n"
     "  -s, --steps           log steps taken\n"
     "  -t, --tape TAPE       tape text or file\n"
+    "  -v, --verbose         verbose output\n"
     ;
 
 
 struct AppArgs {
     int needs_help;
     int log_steps;
+    int verbose;
     const char* program;
     const char* tape;
     const char* output;
@@ -85,6 +88,10 @@ parse_args(int argc, const char* argv[], struct AppArgs* args) {
                 else if (strcmp(argv[i], "-o") == 0 ||
                     strcmp(argv[i], "--output") == 0) {
                     state = 3;
+                }
+                else if (strcmp(argv[i], "-v") == 0 ||
+                    strcmp(argv[i], "--verbose") == 0) {
+                    args->verbose = 1;
                 }
                 break;
 
@@ -306,10 +313,6 @@ mill_parse_instruction(FILE* file, struct SymTable* symtable,
             break;
         }
 
-        #if 0
-        fprintf(stderr, "** state %d %lc\n", state, c);
-        #endif
-
         switch (state) {
             case 0:
                 if (iswspace(c) == 0) {
@@ -496,10 +499,6 @@ mill_parse_instruction(FILE* file, struct SymTable* symtable,
         }
     }
 
-    #if 0
-    fprintf(stderr, "** state %d EOL\n", state);
-    #endif
-
     switch (state) {
         case 0:
         case 20:
@@ -567,27 +566,32 @@ mill_read_tape(FILE* file, struct MillTape* tape) {
 }
 
 
+static size_t
+mill_tape_start(struct MillTape* tape) {
+    size_t pos = tape->pos;
+    for (size_t i = 0; i < tape->size; ++i) {
+        if (tape->buf[pos] == L'\0') {
+            break;
+        }
+        else {
+            pos = (pos - 1) % tape->size;
+        }
+    }
+    for (size_t i = 0; i < tape->size; ++i) {
+        if (tape->buf[pos] != L'\0') {
+            break;
+        }
+        else {
+            pos = (pos + 1) % tape->size;
+        }
+    }
+    return pos;
+}
+
+
 static int
 mill_print_tape(FILE* file, struct MillTape* tape) {
-    size_t start = 0;
-    size_t end = 0;
-    for (size_t i = 0; i < tape->size; ++i) {
-        if (tape->buf[start] == L'\0') {
-            break;
-        }
-        else {
-            start = (start - 1) % tape->size;
-        }
-    }
-    for (size_t i = 0; i < tape->size; ++i) {
-        if (tape->buf[start] != L'\0') {
-            break;
-        }
-        else {
-            start = (start + 1) % tape->size;
-        }
-    }
-
+    size_t start = mill_tape_start(tape);
     int res = fputws(&tape->buf[start], file);
     if (res < 0) {
         perror("fputws");
@@ -610,8 +614,103 @@ mill_print_tape(FILE* file, struct MillTape* tape) {
 
 
 static int
+_dump_tape(FILE* file, struct MillTape* tape, int color) {
+    size_t bufsize = tape->size;
+    size_t half = bufsize / 2;
+    size_t pos = tape->pos;
+
+    size_t a = bufsize;
+    size_t b = bufsize;
+    size_t c = bufsize;
+    size_t d = bufsize;
+
+    wchar_t* p = &tape->buf[0];
+    for (size_t i = 0; i < half; ++i) {
+        if (*p++ != L'\0') {
+            if (i < a) {
+                a = i;
+            }
+            b = i;
+        }
+    }
+    wchar_t* q = &tape->buf[half];
+    for (size_t i = 0; i < half; ++i) {
+        if (*q++ != L'\0') {
+            size_t j = i + half;
+            if (j < c) {
+                c = j;
+            }
+            d = j;
+        }
+    }
+
+    if (a == bufsize && c == bufsize) {
+        return 0;
+    }
+
+    size_t start = (c != bufsize) ? c : a;
+    size_t end = (b != bufsize) ? b : d;
+    for (size_t i = 1; i < 100; ++i) {
+        if ((pos + i) % bufsize == start) {
+            start = pos;
+            break;
+        }
+    }
+    for (size_t i = 1; i < 100; ++i) {
+        if ((pos - i) % bufsize == end) {
+            end = pos;
+            break;
+        }
+    }
+    end = (end + 1) % bufsize;
+
+    for (size_t i = start; i != end; ) {
+        wchar_t c = tape->buf[i];
+        if (c == L'\0') {
+            c = L'_';
+        }
+        if (color != 0 && i == pos) {
+            fputs("\x1b[40;34m", file);
+            fputwc(c, file);
+            fputs("\x1b[0m", file);
+        }
+        else {
+            fputwc(c, file);
+        }
+        i = (i + 1) % bufsize;
+    }
+    return 0;
+}
+
+
+static int
+_dump_state(FILE* file, struct MillProgram* prog,
+    struct MillTape* tape, size_t state, size_t ts) {
+    int color = isatty(fileno(file));
+    fprintf(file, "%04zx: ", ts);
+    int res = _dump_tape(file, tape, color);
+    if (res != 0) { return res; }
+
+    wchar_t* s = prog->symtable.symbols[state];
+    if (color != 0) {
+        fputs("\x1b[35m", file);
+        res = fprintf(file, " %ls\n", s);
+        fputs("\x1b[0m", file);
+    }
+    else {
+        res = fprintf(file, " %ls\n", s);
+    }
+    if (res < 0) {
+        perror("fprintf");
+        return 1;
+    }
+    return 0;
+}
+
+
+static int
 mill_run(struct MillProgram* prog, struct MillTape* tape,
-    size_t* steps) {
+    size_t* steps, int verbose) {
     size_t pos = tape->pos;
     size_t state = prog->syminit;
     size_t halt = prog->symhalt;
@@ -620,20 +719,14 @@ mill_run(struct MillProgram* prog, struct MillTape* tape,
         size_t prev = pos;
         wchar_t c = tape->buf[pos];
 
-        #if 0
-        wchar_t* s = prog->symtable.symbols[state];
-        fprintf(stderr, "state %ls '%lc'\n", s, c);
-        #endif
+        if (verbose != 0) {
+            tape->pos = pos;
+            _dump_state(stderr, prog, tape, state, t);
+        }
 
         for (size_t i = 0; i < prog->instr_count; ++i) {
             struct MillInstr* instr = &prog->instructions[i];
             if (instr->state_in == state && instr->char_in == c) {
-                #if 0
-                wchar_t* s = prog->symtable.symbols[instr->state_out];
-                fprintf(stderr, "  -> %ls '%lc' %c\n", s,
-                    instr->char_out, instr->move);
-                #endif
-
                 tape->buf[pos] = instr->char_out;
                 state = instr->state_out;
                 int dp = 0;
@@ -653,6 +746,9 @@ mill_run(struct MillProgram* prog, struct MillTape* tape,
                     tape->pos = pos;
                     if (steps != NULL) {
                         *steps = t + 1;
+                    }
+                    if (verbose != 0) {
+                        _dump_state(stderr, prog, tape, state, t + 1);
                     }
                     return 0;
                 }
@@ -677,6 +773,11 @@ mill_run(struct MillProgram* prog, struct MillTape* tape,
     if (steps != NULL) {
         *steps = MILL_STEPS_MAX;
     }
+
+    if (verbose != 0) {
+        _dump_state(stderr, prog, tape, state, MILL_STEPS_MAX);
+    }
+
     fprintf(stderr, "timed out after %zu instructions\n", (size_t) MILL_STEPS_MAX);
     return 1;
 }
@@ -731,7 +832,7 @@ int main(int argc, const char* argv[]) {
     }
 
     size_t steps = 0;
-    res = mill_run(&_Program, &_Tape, &steps);
+    res = mill_run(&_Program, &_Tape, &steps, args.verbose);
     if (res != 0) {
         args_close_files(&args);
         return res;
